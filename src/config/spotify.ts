@@ -9,6 +9,8 @@ export const SPOTIFY_CONFIG = {
     'user-read-private',
     'user-read-email',
     'user-library-read',
+    'user-read-playback-state',
+    'user-read-currently-playing',
   ],
   serviceConfiguration: {
     authorizationEndpoint: 'https://accounts.spotify.com/authorize',

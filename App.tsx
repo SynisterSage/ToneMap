@@ -1,71 +1,71 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
-
 import React, {useState, useEffect} from 'react';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import AuthScreen from './src/screens/AuthScreen';
-import HomeScreen from './src/screens/HomeScreen';
-import { ThemeProvider } from './src/theme';
+import {ActivityIndicator, View} from 'react-native';
 import * as Keychain from 'react-native-keychain';
+import {ThemeProvider} from './src/theme';
+import MainNavigator from './src/navigation/MainNavigator';
+import AuthScreen from './src/screens/AuthScreen';
 
-function App() {
-  const isDarkMode = useColorScheme() === 'dark';
+export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isChecking, setIsChecking] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    checkAuth();
+    checkAuthStatus();
   }, []);
 
-  async function checkAuth() {
+  async function checkAuthStatus() {
     try {
-      const creds = await Keychain.getGenericPassword();
-      setIsAuthenticated(!!creds);
-    } catch (err) {
-      console.error('Auth check error:', err);
+      // Note: Keychain stores with username 'spotify', not a service name
+      const credentials = await Keychain.getGenericPassword();
+      if (credentials && credentials.password) {
+        const authData = JSON.parse(credentials.password);
+        // Check if token exists (don't check expiry here - let SpotifyService handle refresh)
+        if (authData.access_token) {
+          console.log('[App] Found valid credentials, logging in');
+          setIsAuthenticated(true);
+        } else {
+          console.log('[App] No access token in credentials');
+        }
+      } else {
+        console.log('[App] No credentials found');
+      }
+    } catch (error) {
+      console.log('[App] Error checking auth status:', error);
     } finally {
-      setIsChecking(false);
+      setIsLoading(false);
     }
   }
 
   async function handleLogout() {
-    await Keychain.resetGenericPassword();
-    setIsAuthenticated(false);
+    try {
+      await Keychain.resetGenericPassword();
+      setIsAuthenticated(false);
+    } catch (error) {
+      console.log('Error logging out:', error);
+    }
   }
 
   function handleLoginSuccess() {
     setIsAuthenticated(true);
   }
 
-  if (isChecking) {
-    return null; // Or a loading spinner
+  if (isLoading) {
+    return (
+      <View style={{flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a'}}>
+        <ActivityIndicator size="large" color="#8b5cf6" />
+      </View>
+    );
   }
 
   return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-        <View style={styles.container}>
-          {isAuthenticated ? (
-            <HomeScreen onLogout={handleLogout} />
-          ) : (
-            <AuthScreen onLoginSuccess={handleLoginSuccess} />
-          )}
+    <ThemeProvider>
+      {isAuthenticated ? (
+        <MainNavigator onLogout={handleLogout} />
+      ) : (
+        <View style={{flex: 1}}>
+          <AuthScreen onLoginSuccess={handleLoginSuccess} />
         </View>
-      </ThemeProvider>
-    </SafeAreaProvider>
+      )}
+    </ThemeProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-});
-
-export default App;
