@@ -24,6 +24,26 @@
 				<string>tonemap</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>Google Sign-In</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.345211832799-gj62mqa09ufnsnu8dfd2c3a0r4vc9vf5</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>Spotify OAuth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>tonemap-spotify</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
@@ -45,7 +65,11 @@
 		<true/>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
+	<string>ToneMap uses your location to provide context-aware music recommendations based on weather and place.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>ToneMap uses your location to provide context-aware music recommendations based on weather and place.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>ToneMap uses motion data to detect your activity (walking, running, etc.) for better music recommendations.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

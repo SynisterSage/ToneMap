@@ -11,7 +11,7 @@ let tokenExpiresAt: number | null = null;
 async function refreshAccessToken(): Promise<string | null> {
   try {
     console.log('[SpotifyService] 🔄 Refreshing access token...');
-    const credentials = await Keychain.getGenericPassword();
+    const credentials = await Keychain.getGenericPassword({service: 'spotify'});
     
     if (!credentials) {
       console.error('[SpotifyService] No credentials to refresh');
@@ -55,7 +55,9 @@ async function refreshAccessToken(): Promise<string | null> {
     };
 
     // Store updated token
-    await Keychain.setGenericPassword('spotify', JSON.stringify(updatedTokenData));
+    await Keychain.setGenericPassword('spotify', JSON.stringify(updatedTokenData), {
+      service: 'spotify',
+    });
     
     // Update expiration time
     tokenExpiresAt = Date.now() + (newTokenData.expires_in * 1000);
@@ -73,11 +75,12 @@ async function refreshAccessToken(): Promise<string | null> {
 // Get access token from Keychain (with automatic refresh)
 async function getAccessToken(): Promise<string | null> {
   try {
-    const credentials = await Keychain.getGenericPassword();
+    const credentials = await Keychain.getGenericPassword({service: 'spotify'});
     if (!credentials) {
-      console.log('[SpotifyService] No credentials found in keychain');
+      console.error('[SpotifyService] ❌ No Spotify credentials found in keychain');
       return null;
     }
+    console.log('[SpotifyService] ✅ Found Spotify credentials in keychain');
 
     const data = JSON.parse(credentials.password);
     
@@ -438,5 +441,540 @@ export async function getUserProfile() {
   } catch (error) {
     console.error('Error fetching user profile:', error);
     return null;
+  }
+}
+
+// =============================================================================
+// PLAYLIST MANAGEMENT
+// =============================================================================
+
+/**
+ * Create a new playlist on Spotify
+ */
+export async function createPlaylist(
+  name: string,
+  description?: string,
+  isPublic: boolean = false,
+  isCollaborative: boolean = false,
+): Promise<{id: string; url: string} | null> {
+  try {
+    const profile = await getUserProfile();
+    if (!profile) {
+      throw new Error('Could not get user profile');
+    }
+
+    console.log('[SpotifyService] 🎵 Creating playlist:', name);
+
+    const data = await spotifyFetch(`/users/${profile.id}/playlists`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name,
+        description: description || 'Created by ToneMap',
+        public: isPublic,
+        collaborative: isCollaborative,
+      }),
+    });
+
+    console.log('[SpotifyService] ✅ Playlist created:', data.id);
+
+    return {
+      id: data.id,
+      url: data.external_urls?.spotify || `https://open.spotify.com/playlist/${data.id}`,
+    };
+  } catch (error) {
+    console.error('[SpotifyService] Error creating playlist:', error);
+    return null;
+  }
+}
+
+/**
+ * Add tracks to a playlist
+ * Handles batching (max 100 tracks per request)
+ */
+export async function addTracksToPlaylist(
+  playlistId: string,
+  trackIds: string[],
+): Promise<boolean> {
+  try {
+    if (trackIds.length === 0) {
+      console.warn('[SpotifyService] No tracks to add');
+      return false;
+    }
+
+    console.log('[SpotifyService] 🎵 Adding', trackIds.length, 'tracks to playlist');
+
+    // Convert track IDs to URIs
+    const trackUris = trackIds.map(id => `spotify:track:${id}`);
+
+    // Spotify allows max 100 tracks per request
+    const batchSize = 100;
+    for (let i = 0; i < trackUris.length; i += batchSize) {
+      const batch = trackUris.slice(i, i + batchSize);
+      
+      await spotifyFetch(`/playlists/${playlistId}/tracks`, {
+        method: 'POST',
+        body: JSON.stringify({
+          uris: batch,
+        }),
+      });
+
+      if (i + batchSize < trackUris.length) {
+        console.log(`[SpotifyService] Progress: ${i + batchSize}/${trackUris.length} tracks added`);
+      }
+    }
+
+    console.log('[SpotifyService] ✅ All tracks added to playlist');
+    return true;
+  } catch (error) {
+    console.error('[SpotifyService] Error adding tracks to playlist:', error);
+    return false;
+  }
+}
+
+/**
+ * Get user's playlists
+ */
+export async function getUserPlaylists(limit: number = 50, offset: number = 0) {
+  try {
+    const data = await spotifyFetch(`/me/playlists?limit=${limit}&offset=${offset}`);
+    
+    return data.items.map((playlist: any) => ({
+      id: playlist.id,
+      name: playlist.name,
+      description: playlist.description,
+      public: playlist.public,
+      collaborative: playlist.collaborative,
+      trackCount: playlist.tracks?.total || 0,
+      images: playlist.images || [],
+      url: playlist.external_urls?.spotify,
+      owner: {
+        id: playlist.owner?.id,
+        displayName: playlist.owner?.display_name,
+      },
+    }));
+  } catch (error) {
+    console.error('[SpotifyService] Error fetching user playlists:', error);
+    return [];
+  }
+}
+
+/**
+ * Get playlist details
+ */
+export async function getPlaylistDetails(playlistId: string) {
+  try {
+    const data = await spotifyFetch(`/playlists/${playlistId}`);
+    
+    return {
+      id: data.id,
+      name: data.name,
+      description: data.description,
+      public: data.public,
+      collaborative: data.collaborative,
+      tracks: data.tracks?.items?.map((item: any) => ({
+        id: item.track?.id,
+        name: item.track?.name,
+        artist: item.track?.artists?.[0]?.name,
+        album: item.track?.album?.name,
+        albumArt: item.track?.album?.images?.[0]?.url,
+        duration_ms: item.track?.duration_ms,
+        addedAt: item.added_at,
+      })) || [],
+      trackCount: data.tracks?.total || 0,
+      images: data.images || [],
+      url: data.external_urls?.spotify,
+      owner: {
+        id: data.owner?.id,
+        displayName: data.owner?.display_name,
+      },
+    };
+  } catch (error) {
+    console.error('[SpotifyService] Error fetching playlist details:', error);
+    return null;
+  }
+}
+
+/**
+ * Update playlist details
+ */
+export async function updatePlaylist(
+  playlistId: string,
+  updates: {
+    name?: string;
+    description?: string;
+    public?: boolean;
+    collaborative?: boolean;
+  },
+): Promise<boolean> {
+  try {
+    await spotifyFetch(`/playlists/${playlistId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+
+    console.log('[SpotifyService] ✅ Playlist updated');
+    return true;
+  } catch (error) {
+    console.error('[SpotifyService] Error updating playlist:', error);
+    return false;
+  }
+}
+
+/**
+ * Remove tracks from playlist
+ */
+export async function removeTracksFromPlaylist(
+  playlistId: string,
+  trackIds: string[],
+): Promise<boolean> {
+  try {
+    const tracks = trackIds.map(id => ({uri: `spotify:track:${id}`}));
+    
+    await spotifyFetch(`/playlists/${playlistId}/tracks`, {
+      method: 'DELETE',
+      body: JSON.stringify({tracks}),
+    });
+
+    console.log('[SpotifyService] ✅ Tracks removed from playlist');
+    return true;
+  } catch (error) {
+    console.error('[SpotifyService] Error removing tracks:', error);
+    return false;
+  }
+}
+
+/**
+ * Reorder tracks in playlist
+ */
+export async function reorderPlaylistTracks(
+  playlistId: string,
+  rangeStart: number,
+  insertBefore: number,
+  rangeLength: number = 1,
+): Promise<boolean> {
+  try {
+    await spotifyFetch(`/playlists/${playlistId}/tracks`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        range_start: rangeStart,
+        insert_before: insertBefore,
+        range_length: rangeLength,
+      }),
+    });
+
+    return true;
+  } catch (error) {
+    console.error('[SpotifyService] Error reordering tracks:', error);
+    return false;
+  }
+}
+
+/**
+ * Delete (unfollow) a playlist
+ * Note: Only works for playlists owned by the current user
+ */
+export async function deletePlaylist(playlistId: string): Promise<boolean> {
+  try {
+    console.log('[SpotifyService] 🗑️ Deleting playlist:', playlistId);
+    
+    await spotifyFetch(`/playlists/${playlistId}/followers`, {
+      method: 'DELETE',
+    });
+
+    console.log('[SpotifyService] ✅ Playlist deleted successfully');
+    return true;
+  } catch (error) {
+    console.error('[SpotifyService] Error deleting playlist:', error);
+    return false;
+  }
+}
+
+// =============================================================================
+// RECOMMENDATIONS & DISCOVERY
+// =============================================================================
+
+/**
+ * Get Spotify recommendations based on seed tracks and target audio features
+ * This is the secret sauce for discovery!
+ */
+export async function getRecommendations(params: {
+  seedTracks?: string[];           // Up to 5 track IDs
+  seedArtists?: string[];          // Up to 5 artist IDs
+  seedGenres?: string[];           // Up to 5 genres
+  limit?: number;                  // Max 100
+  targetAudioFeatures?: {
+    target_energy?: number;
+    target_valence?: number;
+    target_tempo?: number;
+    target_danceability?: number;
+    target_acousticness?: number;
+    target_instrumentalness?: number;
+    target_popularity?: number;
+  };
+  minMaxFeatures?: {
+    min_energy?: number;
+    max_energy?: number;
+    min_valence?: number;
+    max_valence?: number;
+    min_tempo?: number;
+    max_tempo?: number;
+  };
+}): Promise<any[]> {
+  try {
+    // Validate: Need at least one seed
+    const hasSeed = (params.seedTracks && params.seedTracks.length > 0) ||
+                    (params.seedArtists && params.seedArtists.length > 0) ||
+                    (params.seedGenres && params.seedGenres.length > 0);
+    
+    if (!hasSeed) {
+      console.error('[SpotifyService] Recommendations require at least 1 seed (track, artist, or genre)');
+      return [];
+    }
+
+    // Build query parameters
+    const queryParams = new URLSearchParams();
+    
+    // Seeds (max 5 total across all types)
+    let totalSeeds = 0;
+    
+    if (params.seedTracks && params.seedTracks.length > 0) {
+      const validTracks = params.seedTracks.filter(id => id && id.length > 0);
+      if (validTracks.length > 0) {
+        const trackSeeds = validTracks.slice(0, Math.min(5 - totalSeeds, validTracks.length));
+        queryParams.append('seed_tracks', trackSeeds.join(','));
+        totalSeeds += trackSeeds.length;
+      }
+    }
+    
+    if (params.seedArtists && params.seedArtists.length > 0 && totalSeeds < 5) {
+      const validArtists = params.seedArtists.filter(id => id && id.length > 0);
+      if (validArtists.length > 0) {
+        const artistSeeds = validArtists.slice(0, Math.min(5 - totalSeeds, validArtists.length));
+        queryParams.append('seed_artists', artistSeeds.join(','));
+        totalSeeds += artistSeeds.length;
+      }
+    }
+    
+    if (params.seedGenres && params.seedGenres.length > 0 && totalSeeds < 5) {
+      const validGenres = params.seedGenres.filter(g => g && g.length > 0);
+      if (validGenres.length > 0) {
+        const genreSeeds = validGenres.slice(0, Math.min(5 - totalSeeds, validGenres.length));
+        queryParams.append('seed_genres', genreSeeds.join(','));
+        totalSeeds += genreSeeds.length;
+      }
+    }
+    
+    if (totalSeeds === 0) {
+      console.error('[SpotifyService] No valid seeds after filtering');
+      return [];
+    }
+    
+    // Limit
+    queryParams.append('limit', String(params.limit || 20));
+    
+    // Target audio features
+    if (params.targetAudioFeatures) {
+      for (const [key, value] of Object.entries(params.targetAudioFeatures)) {
+        if (value !== undefined) {
+          queryParams.append(key, String(value));
+        }
+      }
+    }
+    
+    // Min/Max constraints
+    if (params.minMaxFeatures) {
+      for (const [key, value] of Object.entries(params.minMaxFeatures)) {
+        if (value !== undefined) {
+          queryParams.append(key, String(value));
+        }
+      }
+    }
+
+    console.log('[SpotifyService] 🎯 Getting recommendations with params:', params);
+
+    const data = await spotifyFetch(`/recommendations?${queryParams.toString()}`);
+    
+    const recommendations = data.tracks.map((track: any) => ({
+      id: track.id,
+      name: track.name,
+      artist: track.artists[0]?.name || 'Unknown Artist',
+      artistId: track.artists[0]?.id,
+      album: track.album?.name || '',
+      albumArt: track.album?.images[0]?.url || null,
+      duration_ms: track.duration_ms,
+      popularity: track.popularity || 50,
+      explicit: track.explicit || false,
+      preview_url: track.preview_url,
+    }));
+
+    console.log('[SpotifyService] ✅ Got', recommendations.length, 'recommendations');
+
+    return recommendations;
+  } catch (error) {
+    console.error('[SpotifyService] Error getting recommendations:', error);
+    return [];
+  }
+}
+
+/**
+ * Get available genre seeds for recommendations
+ */
+export async function getAvailableGenreSeeds(): Promise<string[]> {
+  try {
+    const data = await spotifyFetch('/recommendations/available-genre-seeds');
+    return data.genres || [];
+  } catch (error) {
+    console.error('[SpotifyService] Error getting genre seeds:', error);
+    return [];
+  }
+}
+
+/**
+ * Get an artist's top tracks (REAL working alternative to recommendations)
+ */
+export async function getArtistTopTracks(artistId: string, market: string = 'US'): Promise<any[]> {
+  try {
+    const data = await spotifyFetch(`/artists/${artistId}/top-tracks?market=${market}`);
+    
+    return data.tracks.map((track: any) => ({
+      id: track.id,
+      name: track.name,
+      artist: track.artists[0]?.name || 'Unknown Artist',
+      artistId: track.artists[0]?.id,
+      album: track.album?.name || '',
+      albumArt: track.album?.images[0]?.url || null,
+      duration_ms: track.duration_ms,
+      popularity: track.popularity || 50,
+      explicit: track.explicit || false,
+      preview_url: track.preview_url,
+    }));
+  } catch (error) {
+    console.error(`[SpotifyService] Error getting top tracks for artist ${artistId}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Get related artists (REAL working alternative to recommendations)
+ */
+export async function getRelatedArtists(artistId: string): Promise<any[]> {
+  try {
+    const data = await spotifyFetch(`/artists/${artistId}/related-artists`);
+    
+    return data.artists.map((artist: any) => ({
+      id: artist.id,
+      name: artist.name,
+      genres: artist.genres || [],
+      popularity: artist.popularity || 50,
+      followers: artist.followers?.total || 0,
+      images: artist.images || [],
+    }));
+  } catch (error) {
+    console.error(`[SpotifyService] Error getting related artists for ${artistId}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Search for tracks by genre, artist, or query (REAL working alternative)
+ */
+export async function searchTracks(params: {
+  query?: string;
+  genre?: string;
+  artist?: string;
+  limit?: number;
+}): Promise<any[]> {
+  try {
+    let searchQuery = '';
+    
+    if (params.query) {
+      searchQuery = params.query;
+    } else {
+      const parts: string[] = [];
+      if (params.genre) parts.push(`genre:"${params.genre}"`);
+      if (params.artist) parts.push(`artist:"${params.artist}"`);
+      searchQuery = parts.join(' ');
+    }
+    
+    if (!searchQuery) {
+      console.error('[SpotifyService] Search requires at least one parameter');
+      return [];
+    }
+    
+    const limit = params.limit || 20;
+    const encodedQuery = encodeURIComponent(searchQuery);
+    
+    const data = await spotifyFetch(`/search?q=${encodedQuery}&type=track&limit=${limit}`);
+    
+    return data.tracks.items.map((track: any) => ({
+      id: track.id,
+      name: track.name,
+      artist: track.artists[0]?.name || 'Unknown Artist',
+      artistId: track.artists[0]?.id,
+      album: track.album?.name || '',
+      albumArt: track.album?.images[0]?.url || null,
+      duration_ms: track.duration_ms,
+      popularity: track.popularity || 50,
+      explicit: track.explicit || false,
+      preview_url: track.preview_url,
+    }));
+  } catch (error) {
+    console.error('[SpotifyService] Error searching tracks:', error);
+    return [];
+  }
+}
+
+/**
+ * Get tracks from an album (for deep diving into user's favorite albums)
+ */
+export async function getAlbumTracks(albumId: string, limit: number = 50): Promise<any[]> {
+  try {
+    // First get album info to get the album art
+    const albumData = await spotifyFetch(`/albums/${albumId}`);
+    const albumArt = albumData.images?.[0]?.url || null;
+    const albumName = albumData.name || '';
+    
+    // Then get tracks
+    const data = await spotifyFetch(`/albums/${albumId}/tracks?limit=${limit}`);
+    
+    return data.items.map((track: any) => ({
+      id: track.id,
+      name: track.name,
+      artist: track.artists[0]?.name || 'Unknown Artist',
+      artistId: track.artists[0]?.id,
+      album: albumName,
+      albumArt: albumArt, // Include album art from parent album
+      duration_ms: track.duration_ms,
+      popularity: 50, // Album tracks don't have individual popularity
+      explicit: track.explicit || false,
+      preview_url: track.preview_url,
+      track_number: track.track_number,
+    }));
+  } catch (error) {
+    console.error(`[SpotifyService] Error getting album tracks for ${albumId}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Get user's saved albums
+ */
+export async function getUserSavedAlbums(limit: number = 50): Promise<any[]> {
+  try {
+    const data = await spotifyFetch(`/me/albums?limit=${limit}`);
+    
+    return data.items.map((item: any) => ({
+      id: item.album.id,
+      name: item.album.name,
+      artist: item.album.artists[0]?.name || 'Unknown Artist',
+      artistId: item.album.artists[0]?.id,
+      releaseDate: item.album.release_date,
+      totalTracks: item.album.total_tracks,
+      images: item.album.images || [],
+      addedAt: item.added_at,
+    }));
+  } catch (error) {
+    console.error('[SpotifyService] Error getting saved albums:', error);
+    return [];
   }
 }

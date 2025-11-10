@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "345211832799",
+    "project_id": "tonemap-14a81",
+    "storage_bucket": "tonemap-14a81.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:345211832799:android:216d672395c92512e45c6a",
+        "android_client_info": {
+          "package_name": "com.tonemap"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "345211832799-meum1jfjbd5phtshdpt6osj9mrigr1n9.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCAP-ab4J43ygfra0nSMFQlxhcZiDEZ-z4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "345211832799-meum1jfjbd5phtshdpt6osj9mrigr1n9.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "345211832799-gj62mqa09ufnsnu8dfd2c3a0r4vc9vf5.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "org.reactjs.native.example.ToneMap"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

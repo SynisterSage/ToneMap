@@ -9,6 +9,7 @@ import {H1, Body} from '../components/Typography';
 import {useTheme} from '../theme';
 import {sha256} from 'js-sha256';
 import base64 from 'react-native-base64';
+import { linkSpotifyAccount } from '../services/UserSession';
 
 // Pure JS PKCE helpers (no native modules needed)
 function generateRandomString(length: number): string {
@@ -142,19 +143,33 @@ export default function AuthScreen({onLoginSuccess}: AuthScreenProps) {
 
       if (data.access_token) {
         console.log('[AuthScreen] ✅ Access token received, storing in keychain');
-        await Keychain.setGenericPassword('spotify', JSON.stringify(data));
+        await Keychain.setGenericPassword('spotify', JSON.stringify(data), {
+          service: 'spotify',
+        });
         console.log('[AuthScreen] ✅ Token stored successfully');
-        setLoading(false);
         
-        // Small delay to ensure state updates
-        setTimeout(() => {
-          console.log('[AuthScreen] ✅ Calling onLoginSuccess');
-          if (onLoginSuccess) {
-            onLoginSuccess();
-          } else {
-            Alert.alert('Connected', 'Spotify account connected successfully.');
-          }
-        }, 100);
+        // Link Spotify account to Firebase user
+        console.log('[AuthScreen] 🔄 Linking Spotify account to Firebase user...');
+        const linked = await linkSpotifyAccount();
+        
+        if (linked) {
+          console.log('[AuthScreen] ✅ Spotify account linked successfully');
+          setLoading(false);
+          
+          // Small delay to ensure state updates
+          setTimeout(() => {
+            console.log('[AuthScreen] ✅ Calling onLoginSuccess');
+            if (onLoginSuccess) {
+              onLoginSuccess();
+            } else {
+              Alert.alert('Connected', 'Your Spotify account has been connected!');
+            }
+          }, 100);
+        } else {
+          console.error('[AuthScreen] ❌ Failed to link Spotify account');
+          Alert.alert('Error', 'Connected to Spotify but failed to link account. Please try again.');
+          setLoading(false);
+        }
       } else {
         console.error('[AuthScreen] ❌ Token error:', data);
         Alert.alert('Error', data.error_description || data.error || 'Failed to get token');

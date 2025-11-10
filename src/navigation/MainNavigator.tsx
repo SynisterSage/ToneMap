@@ -11,9 +11,15 @@ const Tab = createBottomTabNavigator();
 
 interface MainNavigatorProps {
   onLogout: () => void;
+  onConnectSpotify: () => void;
+  onDisconnectSpotify: () => void;
 }
 
-export default function MainNavigator({onLogout}: MainNavigatorProps) {
+export default function MainNavigator({
+  onLogout,
+  onConnectSpotify,
+  onDisconnectSpotify,
+}: MainNavigatorProps) {
   return (
     <NavigationContainer>
       <Tab.Navigator
@@ -27,7 +33,13 @@ export default function MainNavigator({onLogout}: MainNavigatorProps) {
         <Tab.Screen name="TonePrint" component={TonePrintScreen} />
         <Tab.Screen name="Playlists" component={PlaylistsScreen} />
         <Tab.Screen name="Profile">
-          {() => <ProfileScreen onLogout={onLogout} />}
+          {() => (
+            <ProfileScreen
+              onLogout={onLogout}
+              onConnectSpotify={onConnectSpotify}
+              onDisconnectSpotify={onDisconnectSpotify}
+            />
+          )}
         </Tab.Screen>
       </Tab.Navigator>
     </NavigationContainer>

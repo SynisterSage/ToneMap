@@ -40,15 +40,20 @@ export default function TonePrintScreen() {
     // Initial load
     fetchCurrentlyPlaying();
     
-    // Poll for currently playing every 30 seconds
-    const interval = setInterval(fetchCurrentlyPlaying, 30000);
+    // Poll for currently playing every 5 seconds for quick updates
+    const interval = setInterval(fetchCurrentlyPlaying, 5000);
     
     return () => clearInterval(interval);
   }, []);
 
   async function fetchCurrentlyPlaying() {
     try {
-      setLoadingCurrent(true);
+      // Only show loading on initial load, not on refresh
+      const isInitialLoad = currentTrack === null && loadingCurrent === true;
+      if (!isInitialLoad) {
+        setLoadingCurrent(false); // Don't show loading on refresh
+      }
+      
       const playing = await SpotifyService.getCurrentlyPlaying();
       
       if (playing && playing.track) {
