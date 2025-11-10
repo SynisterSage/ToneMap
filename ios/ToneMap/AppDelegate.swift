@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import UIKit
 import React
 import React_RCTAppDelegate
@@ -65,3 +66,4 @@ class ReactNativeDelegate: RCTDefaultReactNativeFactoryDelegate {
 #endif
   }
 }
+#endif
