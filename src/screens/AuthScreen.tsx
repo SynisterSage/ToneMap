@@ -1,11 +1,15 @@
 import React, {useState} from 'react';
-import {Alert, Button, SafeAreaView, StyleSheet, Text, View} from 'react-native';
+import {Alert, SafeAreaView, StyleSheet, View} from 'react-native';
 import {authorize, AuthorizeResult} from 'react-native-app-auth';
 import * as Keychain from 'react-native-keychain';
 import {SPOTIFY_CONFIG, SpotifyAuthResult} from '../config/spotify';
+import ThemedButton from '../components/ThemedButton';
+import {H1, Body} from '../components/Typography';
+import {useTheme} from '../theme';
 
 export default function AuthScreen() {
   const [loading, setLoading] = useState(false);
+  const {colors, spacing} = useTheme();
 
   async function handleConnect() {
     setLoading(true);
@@ -46,15 +50,19 @@ export default function AuthScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}> 
-      <View style={styles.container}>
-        <Text style={styles.title}>ToneMap</Text>
-        <Text style={styles.subtitle}>Connect your Spotify account to begin</Text>
-        <View style={styles.button}>
-          <Button title={loading ? 'Connecting…' : 'Connect Spotify'} onPress={handleConnect} disabled={loading} />
+    <SafeAreaView style={[styles.safe, {backgroundColor: colors.background}]}> 
+      <View style={[styles.container, {padding: spacing.medium}]}> 
+        <H1 style={{marginBottom: spacing.small}}>ToneMap</H1>
+        <Body style={{textAlign: 'center', marginBottom: spacing.large}}>
+          Connect your Spotify account to begin — ToneMap will analyze your listening and build your TonePrint.
+        </Body>
+
+        <View style={{width: '100%'}}>
+          <ThemedButton title={loading ? 'Connecting…' : 'Connect Spotify'} onPress={handleConnect} disabled={loading} />
         </View>
-        <View style={styles.button}>
-          <Button title="Show stored credentials (debug)" onPress={debugShowStored} />
+
+        <View style={{width: '100%', marginTop: spacing.small}}>
+          <ThemedButton title="Show stored credentials (debug)" onPress={debugShowStored} variant="ghost" />
         </View>
       </View>
     </SafeAreaView>
@@ -63,8 +71,5 @@ export default function AuthScreen() {
 
 const styles = StyleSheet.create({
   safe: {flex: 1},
-  container: {flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20},
-  title: {fontSize: 32, fontWeight: '700', marginBottom: 8},
-  subtitle: {fontSize: 16, color: '#666', marginBottom: 24, textAlign: 'center'},
-  button: {width: '100%', marginTop: 12},
+  container: {flex: 1, alignItems: 'center', justifyContent: 'center'},
 });
