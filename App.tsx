@@ -193,11 +193,20 @@ export default function App() {
   }
 
   async function handleDisconnectSpotify() {
-    console.log('[App] Spotify disconnected');
+    console.log('[App] Disconnecting Spotify...');
+    
+    // Immediately update UI state
+    setSpotifyConnected(false);
+    
     // Stop all services when disconnected
     ListeningHistoryService.stopTracking();
     PatternAnalysisService.stopPeriodicAnalysis();
-    setSpotifyConnected(false);
+    
+    // Clear session state to prevent auto-reconnect
+    const {clearSpotifyFromSession} = require('./src/services/UserSession');
+    await clearSpotifyFromSession();
+    
+    console.log('[App] ✅ Spotify disconnected successfully');
   }
 
   if (isLoading) {

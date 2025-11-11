@@ -39,27 +39,30 @@ export async function initializeSession(): Promise<UserSession | null> {
 
     console.log('[UserSession] ✅ Firebase user found:', firebaseUser.uid);
 
-    // Check if Spotify is connected
-    const spotifyTokens = await FirebaseAuthService.getSpotifyTokens();
-    const spotifyConnected = !!spotifyTokens;
+    // Check if Spotify is connected by looking in the correct keychain service
+    const credentials = await Keychain.getGenericPassword({service: 'spotify'});
+    const spotifyConnected = !!credentials;
 
     let spotifyUserId: string | undefined;
     let spotifyDisplayName: string | undefined;
 
     if (spotifyConnected) {
+      console.log('[UserSession] 🔑 Found Spotify credentials in keychain');
       try {
         const profile = await SpotifyService.getUserProfile();
         if (profile) {
           spotifyUserId = profile.id;
           spotifyDisplayName = profile.displayName;
           console.log('[UserSession] ✅ Spotify connected:', spotifyDisplayName);
+        } else {
+          console.warn('[UserSession] ⚠️  Could not fetch Spotify profile, but tokens exist');
         }
       } catch (error: any) {
         console.warn('[UserSession] Failed to get Spotify profile:', error);
         
         // If Spotify auth is expired, clear tokens and mark as disconnected
-        if (error.message === 'SPOTIFY_AUTH_EXPIRED') {
-          console.log('[UserSession] ⚠️  Spotify session expired, clearing tokens');
+        if (error.message === 'SPOTIFY_AUTH_EXPIRED' || error.message === 'No access token available') {
+          console.log('[UserSession] ⚠️  Spotify session expired or invalid, clearing tokens');
           try {
             await Keychain.resetGenericPassword({service: 'spotify'});
           } catch (keychainError) {
@@ -74,6 +77,8 @@ export async function initializeSession(): Promise<UserSession | null> {
           };
         }
       }
+    } else {
+      console.log('[UserSession] ⚠️  No Spotify credentials found in keychain');
     }
 
     currentSession = {
@@ -175,6 +180,30 @@ export function getCurrentUserId(): string | null {
   }
   // Fallback: check Firebase directly
   return FirebaseAuthService.getCurrentUserId();
+}
+
+/**
+ * Clear Spotify connection from session (disconnect Spotify only)
+ */
+export async function clearSpotifyFromSession(): Promise<void> {
+  console.log('[UserSession] Clearing Spotify from session...');
+  
+  // Clear Spotify tokens from keychain
+  try {
+    await Keychain.resetGenericPassword({service: 'spotify'});
+    console.log('[UserSession] ✅ Spotify tokens cleared from keychain');
+  } catch (error) {
+    console.log('[UserSession] Error clearing Spotify tokens:', error);
+  }
+  
+  // Update current session
+  if (currentSession) {
+    currentSession.spotifyConnected = false;
+    currentSession.spotifyUserId = undefined;
+    currentSession.spotifyDisplayName = undefined;
+  }
+  
+  console.log('[UserSession] ✅ Spotify cleared from session');
 }
 
 /**

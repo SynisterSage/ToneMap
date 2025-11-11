@@ -4,7 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS contextual_suggestions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID NOT NULL,
+  user_id TEXT NOT NULL,  -- Changed from UUID to TEXT to support Firebase Auth UIDs
   playlist_data JSONB NOT NULL,
   context_snapshot JSONB NOT NULL,
   context_changes JSONB,

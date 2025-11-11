@@ -42,8 +42,8 @@ export default function ConnectedAccountsCard({
   useEffect(() => {
     checkSpotifyConnection();
     
-    // Also check when component becomes visible (focus)
-    const interval = setInterval(checkSpotifyConnection, 3000); // Check every 3 seconds
+    // Check periodically but less aggressively to avoid rate limits
+    const interval = setInterval(checkSpotifyConnection, 60000); // Check every 60 seconds to avoid rate limits
     return () => clearInterval(interval);
   }, []);
 
@@ -116,18 +116,23 @@ export default function ConnectedAccountsCard({
             style: 'destructive',
             onPress: async () => {
               try {
-                // Clear Spotify credentials
-                await Keychain.resetGenericPassword({service: 'spotify'});
+                console.log('[ConnectedAccountsCard] Disconnecting Spotify...');
+                
+                // Update UI immediately
                 setAccounts(prev =>
                   prev.map(acc =>
                     acc.id === accountId
-                      ? {...acc, connected: false, email: undefined}
+                      ? {...acc, connected: false, email: undefined, displayName: undefined, profileImage: undefined}
                       : acc
                   )
                 );
-                onDisconnectSpotify();
+                
+                // Call parent disconnect handler (which clears keychain and session)
+                await onDisconnectSpotify();
+                
+                console.log('[ConnectedAccountsCard] ✅ Spotify disconnected');
               } catch (error) {
-                console.log('Error disconnecting Spotify:', error);
+                console.log('[ConnectedAccountsCard] Error disconnecting Spotify:', error);
               }
             },
           },

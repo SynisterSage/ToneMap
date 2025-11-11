@@ -569,7 +569,17 @@ class PatternAnalysisServiceClass {
         .select('*')
         .eq('user_id', userId);
 
-      if (error || !patterns || patterns.length === 0) return null;
+      if (error) {
+        console.error('[PatternAnalysis] ❌ Error fetching patterns:', error);
+        return null;
+      }
+      
+      if (!patterns || patterns.length === 0) {
+        console.warn('[PatternAnalysis] ⚠️  No patterns found in database. Run pattern analysis first.');
+        return null;
+      }
+      
+      console.log('[PatternAnalysis] ✅ Found', patterns.length, 'patterns for taste summary');
 
       // Calculate overall averages
       const avgEnergy = patterns.reduce((sum: number, p: any) => sum + (p.avg_energy || 0), 0) / patterns.length;

@@ -1,5 +1,5 @@
 import React, {useState, useEffect, useCallback, useRef} from 'react';
-import {SafeAreaView, StyleSheet, View, ScrollView, RefreshControl, Alert, Animated, Vibration, Platform} from 'react-native';
+import {SafeAreaView, StyleSheet, View, ScrollView, RefreshControl, Alert, Animated, Vibration, Platform, AppState, AppStateStatus} from 'react-native';
 import {H1, Body, Caption} from '../components/Typography';
 import {useTheme} from '../theme';
 import ThemedButton from '../components/ThemedButton';
@@ -38,18 +38,37 @@ export default function HomeScreen({onLogout, navigation}: HomeScreenProps) {
   
   // Interval for now playing updates
   const nowPlayingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const appState = useRef(AppState.currentState);
 
   // Load home data on mount
   useEffect(() => {
     loadHomeData();
     
-    // Start now playing polling (every 10 seconds)
+    // Start now playing polling (every 30 seconds)
     startNowPlayingPolling();
+    
+    // Listen for app state changes (pause polling when backgrounded)
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
     
     return () => {
       stopNowPlayingPolling();
+      subscription.remove();
     };
   }, []);
+
+  // Handle app state changes
+  const handleAppStateChange = (nextAppState: AppStateStatus) => {
+    if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+      // App has come to foreground - resume polling
+      console.log('[HomeScreen] 🟢 App foregrounded, resuming polling');
+      startNowPlayingPolling();
+    } else if (nextAppState.match(/inactive|background/)) {
+      // App has gone to background - stop polling to save API calls
+      console.log('[HomeScreen] 🔴 App backgrounded, pausing polling');
+      stopNowPlayingPolling();
+    }
+    appState.current = nextAppState;
+  };
 
   // Fade in animation when data loads
   useEffect(() => {
@@ -67,10 +86,19 @@ export default function HomeScreen({onLogout, navigation}: HomeScreenProps) {
     try {
       console.log('[HomeScreen] 📊 Loading home data...');
       const data = await HomeDataService.fetchHomeData();
+      console.log('[HomeScreen] ✅ Data loaded:', {
+        hasNowPlaying: !!data.nowPlaying,
+        hasStats: !!data.quickStats,
+        hasToneprint: !!data.tonePrintSummary,
+        hasTopTracks: !!data.topTracks,
+      });
       setHomeData(data);
-    } catch (error) {
-      console.error('[HomeScreen] Error loading home data:', error);
-      Alert.alert('Error', 'Failed to load home data. Please try again.');
+    } catch (error: any) {
+      console.error('[HomeScreen] ❌ Error loading home data:', error?.message || error);
+      // Don't show alert for missing Spotify connection
+      if (error?.message !== 'No access token available') {
+        Alert.alert('Error', 'Failed to load home data. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -95,17 +123,21 @@ export default function HomeScreen({onLogout, navigation}: HomeScreenProps) {
 
     nowPlayingInterval.current = setInterval(async () => {
       try {
+        console.log('[HomeScreen] 🔄 Polling for now playing...');
         const nowPlaying = await HomeDataService.getNowPlaying();
+        console.log('[HomeScreen] 🎵 Now playing:', nowPlaying ? nowPlaying.track.name : 'Nothing');
+        
         if (homeData) {
           setHomeData({
             ...homeData,
             nowPlaying,
           });
         }
-      } catch (error) {
-        console.error('[HomeScreen] Error updating now playing:', error);
+      } catch (error: any) {
+        console.error('[HomeScreen] ❌ Error updating now playing:', error?.message || error);
+        // Don't stop polling on error - just log it
       }
-    }, 10000); // 10 seconds
+    }, 30000); // 30 seconds (reduced from 10s to avoid rate limits)
   };
 
   // Stop polling

@@ -271,8 +271,10 @@ export class FirebaseAuthService {
         throw new Error('No Firebase user signed in');
       }
 
-      // Store Spotify tokens in Keychain
-      await Keychain.setGenericPassword(spotifyAccessToken, spotifyRefreshToken);
+      // Store Spotify tokens in Keychain with 'spotify' service
+      // Note: This doesn't actually store the tokens here anymore since SpotifyAuthService 
+      // already stored them. This is just for backwards compatibility with the DB update.
+      // The actual tokens are in keychain service 'spotify' via SpotifyAuthService
 
       // Update user_preferences with Spotify connection
       const supabase = getSupabaseClient();
@@ -301,18 +303,27 @@ export class FirebaseAuthService {
 
   /**
    * Get Spotify tokens from Keychain
+   * IMPORTANT: Reads from 'spotify' service to match SpotifyAuthService storage
    */
   static async getSpotifyTokens(): Promise<{
     accessToken: string;
     refreshToken: string;
   } | null> {
     try {
-      const credentials = await Keychain.getGenericPassword();
+      // Read from 'spotify' service - this is where SpotifyAuthService stores tokens
+      const credentials = await Keychain.getGenericPassword({service: 'spotify'});
       if (credentials) {
-        return {
-          accessToken: credentials.username,
-          refreshToken: credentials.password,
-        };
+        // SpotifyAuthService stores tokens as JSON in password field
+        try {
+          const tokenData = JSON.parse(credentials.password);
+          return {
+            accessToken: tokenData.access_token,
+            refreshToken: tokenData.refresh_token,
+          };
+        } catch (parseError) {
+          console.error('❌ Failed to parse Spotify token data:', parseError);
+          return null;
+        }
       }
       return null;
     } catch (error) {
